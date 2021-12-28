@@ -11,16 +11,13 @@ Outputs
 """
 
 
-print("Starting Imports")
-#from statistics import mean
 from time import sleep
-import sys
 
-import machine
+import machine # pylint: disable=import-error
 
 TICK_DELAY = 0.2 # update every x seconds
 
-LIGHT_VAL = 500 # if it's under this, dim the screen.
+LIGHT_TRANSITION = 1000 # if it's over this, dim the screen.
 
 BRIGHT = 0
 DIM = 1
@@ -47,8 +44,15 @@ def mean(inputdata:list):
     result = meanval  / listlen
     return result
 
+def value_to_bool(value: int):
+    """ turns an input into a bool """
+    return bool(int(value) >=1)
+
+# pylint: disable=too-many-instance-attributes
 class DashLight():
+    """ Controls the dashlight """
     def __init__(self):
+        """ start up things """
         print("In init")
         self.light_max = 0 # 560 in the breadboard with the iphone light on it
         self.light_min = 65535 # 2000ish in the breadboard in the kitchen
@@ -59,7 +63,11 @@ class DashLight():
 
         self.headlight = False
 
-        self.override_dim = False
+        # self.override values
+        # 1     bright
+        # 0     ignore
+        # -1    dim
+        self.override = 0
 
         self.output = False
         self.pins = {
@@ -70,7 +78,7 @@ class DashLight():
             "out_dim" : 10,             # GP10
         }
 
-        self.io = {
+        self.io = { # pylint: disable=invalid-name
             "in_light" : machine.ADC(self.pins["in_light"]),
             "in_headlight" : machine.Pin(self.pins["in_headlight"],
                            machine.Pin.IN,
@@ -117,23 +125,27 @@ class DashLight():
 
         self.override = 0
 
-
-        override_dim = self.io["in_override_dim"].value()
-        override_bright = self.io["in_override_bright"].value()
+        override_dim = value_to_bool(self.io["in_override_dim"].value())
+        override_bright = value_to_bool(self.io["in_override_bright"].value())
         print("Dim: {}".format(override_dim))
         print("Bri: {}".format(override_bright))
-        # read headlight input
-        #self.light = self.io["in_headlight"].value()
-        #print(dir(self.io["in_headlight"]))
-        # read override_dim
-        # read override_light
-        # TODO: when override_dim and override_bright are both true, wtf?
 
-        pass
+        # read headlight input, not that we're likely to use it
+        self.headlight = value_to_bool(self.io["in_headlight"].value())
+        print("HL:  {}".format(self.headlight))
+
+        if override_dim and override_bright:
+            self.override = 1 # err on the side of bright
+        elif override_dim:
+            self.override = -1
+        elif override_bright:
+            self.override = 1
+        else:
+            self.override = 0
 
     def loop(self):
         """ main loop """
-        while 1==1:
+        while True:
             self.tick()
             print("Tick")
             sleep(TICK_DELAY)
@@ -158,6 +170,17 @@ class DashLight():
 
         self.light_average = mean(self.light_history)
 
+    def decide_on_light(self):
+        """ makes a decision based on the light level
+
+            the value goes up when the light goes down,
+            so if it's over `LIGHT_TRANSITION`,
+            then we need to dim the screen
+        """
+        if self.light_average > LIGHT_TRANSITION:
+            return DIM
+        return BRIGHT
+
     def update_output(self):
         """sets the output"""
         # make it dim
@@ -167,16 +190,9 @@ class DashLight():
         elif self.override == 1:
             self.output = BRIGHT
         else:
-            if self.light_average > LIGHT_VAL:
-                self.output = BRIGHT
-            else:
-                self.output = DIM
+            self.output = self.decide_on_light()
 
-        # set the pin
-        # self.pins["out_dim"](self.output)
-
-
+        self.io["out_dim"].value(self.output)
 
 dashlight = DashLight()
 dashlight.loop()
-
