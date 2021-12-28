@@ -18,7 +18,7 @@ import sys
 
 import machine
 
-TICK_DELAY = 1 # update every x seconds
+TICK_DELAY = 0.2 # update every x seconds
 
 LIGHT_VAL = 500 # if it's under this, dim the screen.
 
